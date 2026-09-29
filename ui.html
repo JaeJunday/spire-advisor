@@ -30,12 +30,13 @@
 </style>
 </head>
 <body>
-<h1>🗡️ Spire Advisor <small style="color:#888">v0.111.0 베타</small></h1>
+<h1>🗡️ Spire Advisor <small style="color:#888">v0.111.0 베타</small> <span id="livedot" style="font-size:13px;color:#666">● 수동</span></h1>
 <div class="tabs">
   <button data-tab="reward" class="on">카드 보상</button>
   <button data-tab="shop">상점</button>
   <button data-tab="event">물음표</button>
   <button data-tab="concept">내 덱</button>
+  <button id="livebtn" onclick="toggleLive()">🎮 자동추적 켜기</button>
 </div>
 
 <div class="panel">
@@ -185,9 +186,45 @@ function renderAll(){
 }
 function toggleReward(n){ rewardSel=rewardSel.includes(n)?rewardSel.filter(x=>x!==n):[...rewardSel,n].slice(-3); renderAll(); }
 function toggleShop(n){ shopSel=shopSel.includes(n)?shopSel.filter(x=>x!==n):[...shopSel,n]; renderShop(); }
-document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
+document.querySelectorAll(".tabs button[data-tab]").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
   ["reward","shop","event","concept"].forEach(t=>document.getElementById("tab-"+t).style.display=t===b.dataset.tab?"":"none");});
 document.getElementById("boss").onchange=renderAll;
+let liveOn=false, lastMtime=0;
+function toggleLive(){ liveOn=!liveOn;
+  document.getElementById("livebtn").textContent = liveOn?"🎮 자동추적 끄기":"🎮 자동추적 켜기";
+  if(liveOn)poll(); else {document.getElementById("livedot").textContent="● 수동";document.getElementById("livedot").style.color="#666";}
+}
+async function poll(){
+  if(!liveOn)return;
+  try{
+    const r=await fetch("/api/state"); const s=await r.json();
+    if(s.live){
+      document.getElementById("livedot").textContent="● LIVE "+(s.screen||"");
+      document.getElementById("livedot").style.color="#5bff8f";
+      if(s.mtime!==lastMtime){ lastMtime=s.mtime; applyLive(s); }
+    } else {
+      document.getElementById("livedot").textContent="● 게임 없음";
+      document.getElementById("livedot").style.color="#ff9";
+    }
+  }catch(e){ document.getElementById("livedot").textContent="● 브릿지 없음"; }
+  setTimeout(poll, 2000);
+}
+function applyLive(s){
+  if(s.boss)document.getElementById("boss").value=s.boss;
+  document.getElementById("act").value=s.act||1;
+  document.getElementById("hp").value=s.hp||0;
+  document.getElementById("maxhp").value=s.max_hp||1;
+  document.getElementById("gold").value=s.gold||0;
+  if(s.deck&&s.deck.length)deck=s.deck.slice();
+  if(s.screen==="reward"&&s.reward_options&&s.reward_options.length)rewardSel=s.reward_options.slice(0,3);
+  if(s.screen==="shop"){ shopSel=(s.shop_cards||[]).map(c=>c.name); document.getElementById("removal").value=s.removal_cost||75; }
+  if(s.screen==="event"&&s.event_id)document.getElementById("eventid").value=s.event_id;
+  const tab={reward:"reward",shop:"shop",event:"event"}[s.screen];
+  if(tab)document.querySelector(`[data-tab="${tab}"]`).click();
+  renderAll();
+  if(s.screen==="shop")renderShop();
+  if(s.screen==="event")renderEvent();
+}
 renderAll();
 </script>
 </body>
