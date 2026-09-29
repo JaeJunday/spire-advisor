@@ -35,6 +35,10 @@ BOSS_ALIASES = {
     "queen": "The Queen",
     "testsubjectc10": "Test Subject C10",
     "c10": "Test Subject C10",
+    "vantom": "Vantom",
+    "theinsatiable": "The Insatiable",
+    "insatiable": "The Insatiable",
+    "aeonglass": "Aeonglass",
 }
 
 SCREENS = {"map", "combat", "reward", "shop", "event", "rest"}
@@ -87,11 +91,14 @@ def parse_state(raw):
         "shop_relics": priced(raw.get("shop_relics")),
         "removal_cost": int(raw.get("removal_cost", 75)),
         "event_id": raw.get("event_id"),
+        "floor": raw.get("floor"),
+        "character": raw.get("character"),
     }
 
 
 class BridgeHandler(SimpleHTTPRequestHandler):
     state_file = "game-state.json"
+    saves_dir = ""
 
     def _json(self, obj):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -103,13 +110,24 @@ class BridgeHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/state":
+            # 1순위: 모드 상태 파일 (최근 2분 안에 갱신된 것만. 보상 선택지까지 있음)
+            # 2순위: 세이브 감시 (덱/피/골드/보스).
             try:
-                with open(self.state_file, encoding="utf-8") as f:
-                    raw = json.load(f)
-                self._json(parse_state(raw) | {"mtime": os.path.getmtime(self.state_file)})
-            except FileNotFoundError:
-                self._json({"live": False, "reason": "게임 상태 파일이 없어요. 게임을 켜고 모드를 확인하세요."})
-            except (json.JSONDecodeError, OSError) as e:
+                fresh = os.path.getmtime(self.state_file)
+                import time
+                if time.time() - fresh < 120:
+                    with open(self.state_file, encoding="utf-8") as f:
+                        raw = json.load(f)
+                    s = parse_state(raw)
+                    s["source"] = "mod"
+                    self._json(s | {"mtime": fresh})
+                    return
+            except (FileNotFoundError, json.JSONDecodeError, OSError):
+                pass
+            try:
+                from savewatch import read_live_state
+                self._json(read_live_state(self.saves_dir))
+            except ValueError as e:
                 self._json({"live": False, "reason": f"상태 파일을 읽지 못했어요: {e}"})
             return
         super().do_GET()
@@ -119,8 +137,14 @@ def main():
     ap = argparse.ArgumentParser(description="Spire Advisor live bridge")
     ap.add_argument("--port", type=int, default=8931)
     ap.add_argument("--state", default="game-state.json")
+    ap.add_argument("--saves", default="")  # 비우면 자동 탐색
     args = ap.parse_args()
     BridgeHandler.state_file = args.state
+    if args.saves:
+        BridgeHandler.saves_dir = args.saves
+    else:
+        from savewatch import DEFAULT_SAVES
+        BridgeHandler.saves_dir = DEFAULT_SAVES
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), BridgeHandler)
     print(f"bridge on http://127.0.0.1:{args.port}/ui.html (state: {args.state})")
     srv.serve_forever()
