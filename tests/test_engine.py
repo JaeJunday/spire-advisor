@@ -6,21 +6,21 @@ from engine import score_options, score_shop, score_event
 
 class TestSkip(unittest.TestCase):
     def test_all_weak_options_suggests_skip(self):
-        deck = ["Demon Form", "Limit Break", "Reaper", "Pummel", "Heavy Blade", "Barricade", "Impervious"]
-        result = score_options(deck, ["Strike", "Defend", "Wild Strike"], act=2, boss="Time Eater")
+        deck = ["Demon Form", "Inflame", "Setup Strike", "Fight Me!", "Bludgeon", "Barricade", "Impervious"]
+        result = score_options(deck, ["Strike", "Defend", "Shiv"], act=2, boss="Time Eater")
         self.assertTrue(result["skip"])
 
 
 class TestScoreOptions(unittest.TestCase):
     def test_strength_synergy_flips_pick(self):
-        # Deck is strength-oriented: Limit Break, Reaper, Pummel
-        deck = ["Limit Break", "Reaper", "Pummel", "Strike", "Strike", "Defend", "Defend"]
-        options = ["Demon Form", "Power Through", "Disarm"]
+        # Deck is strength-oriented: Inflame, Setup Strike, Fight Me!
+        deck = ["Inflame", "Setup Strike", "Fight Me!", "Strike", "Strike", "Defend", "Defend"]
+        options = ["Demon Form", "Shrug It Off", "Mangle"]
         result = score_options(deck, options, act=2, boss="Donu & Deca")
         # Demon Form shares High-Strength synergy with 3 deck cards, must win
         self.assertEqual(result["best"], "Demon Form")
         self.assertGreater(
-            result["scores"]["Demon Form"], result["scores"]["Disarm"]
+            result["scores"]["Demon Form"], result["scores"]["Mangle"]
         )
 
 
@@ -30,7 +30,7 @@ class TestShop(unittest.TestCase):
         result = score_shop(
             deck,
             gold=120,
-            cards=[{"name": "Disarm", "price": 110}],
+            cards=[{"name": "Mangle", "price": 110}],
             relics=[],
             removal_cost=75,
             boss="Donu & Deca",
