@@ -1,0 +1,1 @@
+{"patch": "v0.111.0", "events": {"fountain": {"name": "분수", "options": {"치유 (HP 12 회복)": {"heal": 12}, "유물 (HP 6 잃고 유물)": {"hp_cost": 6, "relic": "Anchor"}, "떠나기": {}}}, "golden_idol": {"name": "황금 우상", "options": {"우상 훔치기 (유물, 저주)": {"relic": "Burning Blood", "curse": true}, "그냥 가기": {}}}}}

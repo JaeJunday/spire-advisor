@@ -1,7 +1,14 @@
 """Rule-based engine RED test 1: synergy should flip a pick."""
 import unittest
 
-from engine import score_options, score_shop
+from engine import score_options, score_shop, score_event
+
+
+class TestSkip(unittest.TestCase):
+    def test_all_weak_options_suggests_skip(self):
+        deck = ["Demon Form", "Limit Break", "Reaper", "Pummel", "Heavy Blade", "Barricade", "Impervious"]
+        result = score_options(deck, ["Strike", "Defend", "Wild Strike"], act=2, boss="Time Eater")
+        self.assertTrue(result["skip"])
 
 
 class TestScoreOptions(unittest.TestCase):
@@ -31,6 +38,13 @@ class TestShop(unittest.TestCase):
         # 렌더링이 아니라 동작 검증: 살 수 있는 BEST가 있어야 하고, 삭제가 후보에 있어야 함
         self.assertIn("REMOVE", result["ranked"])
         self.assertIsNotNone(result["best_affordable"])
+
+
+class TestEvent(unittest.TestCase):
+    def test_low_hp_prefers_heal_over_relic(self):
+        deck = ["Strike", "Strike", "Defend", "Defend", "Bash"]
+        result = score_event(deck, hp=15, max_hp=70, gold=100, act=1, boss="Time Eater", event_id="fountain")
+        self.assertEqual(result["best"], "치유 (HP 12 회복)")
 
 
 if __name__ == "__main__":
