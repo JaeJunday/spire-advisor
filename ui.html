@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spire Advisor (v0.111.0)</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #1a1d29; color: #eee; margin: 0; padding: 16px; }
+  h1 { font-size: 20px; }
+  .tabs button { background: #2a2f45; color: #eee; border: 0; padding: 8px 16px; margin-right: 6px; border-radius: 8px; cursor: pointer; }
+  .tabs button.on { background: #5b7cff; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+  .card { width: 150px; background: #242941; border-radius: 10px; padding: 8px; text-align: center; cursor: pointer; border: 2px solid transparent; position: relative; }
+  .card img { width: 100%; border-radius: 6px; background: #333; min-height: 100px; }
+  .card .art-fallback { width: 100%; height: 100px; border-radius: 6px; background: #3a4160; display: flex; align-items: center; justify-content: center; font-size: 40px; }
+  .card.best { border-color: gold; }
+  .card.picked { border-color: #5b7cff; }
+  .card .badge { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: gold; color: #000; font-size: 12px; font-weight: bold; padding: 2px 10px; border-radius: 10px; }
+  .score { font-size: 22px; font-weight: bold; color: #8fd18f; }
+  .reason { font-size: 11px; color: #aaa; min-height: 28px; }
+  .bar { height: 6px; background: #333; border-radius: 3px; margin: 4px 0; }
+  .bar i { display: block; height: 100%; background: #8fd18f; border-radius: 3px; }
+  label { font-size: 13px; color: #bbb; }
+  input, select { background: #2a2f45; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px; margin: 2px 6px 2px 0; }
+  .deck .card { width: 90px; font-size: 11px; }
+  .deck .card img, .deck .art-fallback { min-height: 60px; height: 60px; }
+  .deck .art-fallback { font-size: 24px; }
+  .panel { background: #22263a; border-radius: 10px; padding: 12px; margin: 12px 0; }
+  .warn { color: #ffcc66; }
+</style>
+</head>
+<body>
+<h1>🗡️ Spire Advisor <small style="color:#888">v0.111.0 베타</small></h1>
+<div class="tabs">
+  <button data-tab="reward" class="on">카드 보상</button>
+  <button data-tab="shop">상점</button>
+  <button data-tab="event">물음표</button>
+  <button data-tab="concept">내 덱</button>
+</div>
+
+<div class="panel">
+  <label>보스 <select id="boss">
+    <option value="">(모름)</option>
+    <option>Time Eater</option>
+    <option>Donu &amp; Deca</option>
+    <option>Doormaker + Door</option>
+    <option>The Queen</option>
+    <option>Test Subject C10</option>
+  </select></label>
+  <label>막 <input id="act" type="number" value="1" min="1" max="4" style="width:50px"></label>
+  <label>HP <input id="hp" type="number" value="50" style="width:60px"> / <input id="maxhp" type="number" value="70" style="width:60px"></label>
+  <label>골드 <input id="gold" type="number" value="120" style="width:70px"></label>
+</div>
+
+<div class="panel">
+  <b>내 덱 (<span id="deckcount">0</span>장, 클릭해서 빼기)</b>
+  <div class="row deck" id="deck"></div>
+  <div id="conceptline" style="font-size:13px;color:#bbb"></div>
+</div>
+
+<div id="tab-reward">
+  <div class="panel"><b>보상 선택지 고르기 (카드 풀에서 클릭)</b><div class="row" id="pool-reward"></div></div>
+  <div class="panel"><b>추천 결과</b> <span id="skipmsg" class="warn"></span><div class="row" id="result"></div></div>
+</div>
+
+<div id="tab-shop" style="display:none">
+  <div class="panel"><b>파는 카드 클릭 (가격은 랜덤 예시, 클릭할 때마다 선택)</b><div class="row" id="pool-shop"></div>
+  <label>삭제 비용 <input id="removal" type="number" value="75" style="width:60px"></label>
+  <button onclick="renderShop()">계산</button>
+  <div class="row" id="result-shop"></div>
+  </div>
+</div>
+
+<div id="tab-event" style="display:none">
+  <div class="panel">
+    <label>이벤트 <select id="eventid"><option value="fountain">분수</option><option value="golden_idol">황금 우상</option></select></label>
+    <button onclick="renderEvent()">계산</button>
+    <div class="row" id="result-event"></div>
+  </div>
+</div>
+
+<div id="tab-concept" style="display:none">
+  <div class="panel"><b>카드 풀에서 클릭해서 덱에 넣기</b><div class="row deck" id="pool-deck"></div></div>
+  <div class="panel"><b>버릴 카드 TOP3</b><div class="row" id="remove3"></div></div>
+</div>
+
+<script>
+const PATCH = "v0.111.0";
+const BASE = {"Demon Form":24,"Power Through":43,"Disarm":60,"Limit Break":55,"Reaper":58,"Pummel":40,"Strike":10,"Defend":12,"Heavy Blade":45,"Whirlwind":52,"Bludgeon":62,"Shiv":18,"Adrenaline":75,"Corpse Explosion":68,"Evolve":50,"Feel No Pain":54,"Dark Embrace":56,"Barricade":57,"Impervious":48,"Wild Strike":35};
+const TAGS = {"Demon Form":["scaling","strength"],"Limit Break":["scaling","strength"],"Reaper":["strength","sustain"],"Pummel":["strength","multi_hit"],"Heavy Blade":["strength","single_hit"],"Bludgeon":["single_hit","high_value"],"Whirlwind":["aoe","multi_hit"],"Power Through":["block","status_self"],"Disarm":["weak","boss_tech"],"Shiv":["spam","low_value"],"Adrenaline":["draw","energy"],"Corpse Explosion":["aoe","poison"],"Wild Strike":["status_self","attack"]};
+const TAG_KO = {scaling:"스케일링",strength:"힘",sustain:"유지",single_hit:"단타",high_value:"고효율",aoe:"광역",multi_hit:"다단",block:"방어",status_self:"상태부담",weak:"약화",boss_tech:"보스특효",spam:"난사",low_value:"저효율",draw:"드로우",energy:"에너지",poison:"독",attack:"공격"};
+const CLASSES = {high_strength:["Demon Form","Limit Break","Reaper","Pummel","Heavy Blade","Bludgeon"],status_self:["Power Through","Wild Strike","Immolate"],exhaust:["Feel No Pain","Dark Embrace","Power Through"],aoe:["Whirlwind","Corpse Explosion","Immolate"]};
+const MULT = 1.5;
+const BOSSES = {"Time Eater":{spam_penalty:0.6,high_value_bonus:1.25,note:"12장 제한"}, "Donu & Deca":{aoe_bonus:1.3,weak_bonus:1.15,note:"도누 먼저"}, "Doormaker + Door":{high_value_bonus:1.15,block_bonus:1.15,note:"문 먼저"}, "The Queen":{aoe_bonus:1.2}, "Test Subject C10":{high_value_bonus:1.1}};
+const RELICS = {"Burning Blood":62,"Anchor":55,"Bag of Marbles":50,"Medical Kit":58};
+const EVENTS = {fountain:{name:"분수",options:{"치유 (HP 12 회복)":{heal:12},"유물 (HP 6 잃고 유물)":{hp_cost:6,relic:"Anchor"},"떠나기":{}}},golden_idol:{name:"황금 우상",options:{"우상 훔치기 (유물, 저주)":{relic:"Burning Blood",curse:true},"그냥 가기":{}}}};
+
+let deck = ["Strike","Strike","Strike","Defend","Defend","Defend","Bash"];
+let rewardSel = [];
+
+const img = n => "https://cdn.spire-codex.com/cards-full/stable/" + n.toLowerCase().replace(/[^a-z0-9 ]/g,"").trim().replace(/ +/g,"_") + ".webp";
+const emoji = n => (TAGS[n]||[]).includes("strength")?"💪":(TAGS[n]||[]).includes("aoe")?"🌪️":(TAGS[n]||[]).includes("block")?"🛡️":(TAGS[n]||[]).includes("draw")?"🃏":"🗡️";
+
+function cardHTML(name, extra="") {
+  return `<div class="card ${extra}" data-name="${name}">
+    <img src="${img(name)}" loading="lazy" onerror="this.outerHTML='<div class=art-fallback>${emoji(name)}</div>'">
+    <div>${name}</div></div>`;
+}
+function hits(card, set){ let k=0; for(const m of Object.values(CLASSES)){ if(m.includes(card)) k += [...set].filter(d=>m.includes(d)&&d!==card).length; } return k; }
+function bcoef(card, boss){ const c=BOSSES[boss]||{}; let f=1; const t=new Set(TAGS[card]||[]);
+  if(t.has("spam")&&c.spam_penalty)f*=c.spam_penalty;
+  if((t.has("high_value")||t.has("single_hit"))&&c.high_value_bonus)f*=c.high_value_bonus;
+  if(t.has("aoe")&&c.aoe_bonus)f*=c.aoe_bonus;
+  if(t.has("weak")&&c.weak_bonus)f*=c.weak_bonus;
+  if(t.has("block")&&c.block_bonus)f*=c.block_bonus; return f; }
+function finalScore(card, set, boss){ const b=BASE[card]??30; const k=hits(card,set); return +(b*(MULT**k)*bcoef(card,boss)).toFixed(1); }
+
+function effSize(d){ const ex=new Set(CLASSES.exhaust); return d.length - Math.min(d.filter(x=>ex.has(x)).length,4); }
+function concept(d){ const s=new Set(d);
+  const h=n=>(CLASSES[n]||[]).filter(x=>s.has(x)).length;
+  let c="일반 균형",t=[20,30];
+  if(h("high_strength")>=3){c="힘 스케일링";} else if(h("exhaust")>=3){c="탈진 순환";t=[28,40];} else if(h("aoe")>=2){c="광역 컨트롤";t=[22,32];}
+  return {concept:c, eff:effSize(d), raw:d.length, target:t};
+}
+function scoreReward(){
+  const boss=document.getElementById("boss").value, act=+document.getElementById("act").value;
+  const set=new Set(deck); const out=rewardSel.map(n=>({n, s:finalScore(n,set,boss)}));
+  out.sort((a,b)=>b.s-a.s);
+  const top=out.length?out[0].s:0;
+  let skip=false,msg="";
+  if(out.length&&top<40){skip=true;msg=`최고 ${top}점. 다 약해서 스킵이 나아요.`;}
+  const max=Math.max(...out.map(o=>o.s),1);
+  document.getElementById("result").innerHTML = out.map((o,i)=>`<div class="card ${i===0?"best":""}" onclick="pickReward('${o.n}')">
+    ${i===0?'<div class=badge>BEST</div>':""}<img src="${img(o.n)}" loading="lazy" onerror="this.outerHTML='<div class=art-fallback>${emoji(o.n)}</div>'">
+    <div>${o.n}</div><div class=score>${o.s}</div><div class=bar><i style="width:${o.s/max*100}%"></i></div>
+    <div class=reason>${(TAGS[o.n]||[]).map(t=>TAG_KO[t]||t).join(" · ")}</div></div>`).join("");
+  document.getElementById("skipmsg").textContent = skip?("⏭️ "+msg):"";
+}
+function pickReward(n){ deck.push(n); rewardSel=[]; renderAll(); }
+
+let shopSel=[];
+function renderShop(){
+  const boss=document.getElementById("boss").value, gold=+document.getElementById("gold").value, rc=+document.getElementById("removal").value;
+  const set=new Set(deck); const cands=[];
+  for(const n of shopSel){ const s=finalScore(n,set,boss); cands.push({a:"BUY "+n, v:+(s-20*75/Math.max(gold,1)).toFixed(1), cost:75}); }
+  const worst=removal3()[0];
+  let g=45; if(worst){ if(worst==="Strike")g+=10; if(worst==="Defend")g+=8; }
+  if(effSize(deck)<=20)g+=8;
+  cands.push({a:"REMOVE ("+(worst||"없음")+")", v:+(g-20*rc/Math.max(gold,1)).toFixed(1), cost:rc});
+  cands.push({a:"SAVE", v:5, cost:0});
+  cands.sort((a,b)=>b.v-a.v);
+  const aff=cands.filter(c=>c.cost<=gold); const best=aff.length?aff[0].a:"SAVE";
+  const max=Math.max(...cands.map(c=>c.v),1);
+  document.getElementById("result-shop").innerHTML=cands.map(c=>`<div class="card ${c.a===best?"best":""}"><div>${c.a}</div><div class=score>${c.v}</div><div class=bar><i style="width:${Math.max(c.v,0)/max*100}%"></i></div><div class=reason>${c.cost}G ${c.cost>gold?"(부족)":""}</div></div>`).join("");
+}
+function renderEvent(){
+  const id=document.getElementById("eventid").value, hp=+document.getElementById("hp").value, mh=+document.getElementById("maxhp").value;
+  const ev=EVENTS[id], set=new Set(deck), mit=set.has("Evolve")||set.has("Medical Kit");
+  const miss=Math.max(mh-hp,0), frac=hp/Math.max(mh,1);
+  const rows=Object.entries(ev.options).map(([n,fx])=>{ let v=50; const b=[];
+    if(fx.heal){v+=miss*0.3;b.push("치유");} if(fx.hp_cost){const p=fx.hp_cost*(frac<0.4?2:0.8);v-=p;b.push("HP비용");}
+    if(fx.relic){v+=(RELICS[fx.relic]||40)*0.5;b.push("유물");} if(fx.curse){v-=(mit?8:20);b.push("저주");}
+    return {n,v:+v.toFixed(1),b:b.join(" · ")}; });
+  rows.sort((a,b)=>b.v-a.v); const max=Math.max(...rows.map(r=>r.v),1);
+  document.getElementById("result-event").innerHTML=rows.map((r,i)=>`<div class="card ${i===0?"best":""}">${i===0?'<div class=badge>BEST</div>':""}<div>${r.n}</div><div class=score>${r.v}</div><div class=bar><i style="width:${r.v/max*100}%"></i></div><div class=reason>${r.b}</div></div>`).join("");
+}
+function removal3(){
+  const set=new Set(deck);
+  const sc=deck.map(c=>{let v=0; if(c==="Strike")v+=10; if(c==="Defend")v+=8; if((BASE[c]??30)<20)v+=6;
+    if(hits(c,new Set([...set].filter(x=>x!==c)))===0&&c!=="Strike"&&c!=="Defend")v+=2;
+    if(deck.filter(x=>x===c).length>=3)v+=4; return [v,c];});
+  sc.sort((a,b)=>b[0]-a[0]); return sc.slice(0,3).map(x=>x[1]);
+}
+function renderAll(){
+  const names=Object.keys(BASE);
+  document.getElementById("deck").innerHTML=deck.map((n,i)=>`<div class="card" onclick="deck.splice(${i},1);renderAll()"><img src="${img(n)}" loading="lazy" onerror="this.outerHTML='<div class=art-fallback>${emoji(n)}</div>'"><div>${n}</div></div>`).join("");
+  document.getElementById("deckcount").textContent=deck.length;
+  const cp=concept(deck);
+  document.getElementById("conceptline").textContent=`컨셉: ${cp.concept} · 유효 ${cp.eff}장(실제 ${cp.raw}) · 적정 ${cp.target[0]}~${cp.target[1]}${BOSSES[document.getElementById("boss").value]?(" · 보스: "+BOSSES[document.getElementById("boss").value].note):""}`;
+  document.getElementById("pool-reward").innerHTML=names.map(n=>`<div class="card ${rewardSel.includes(n)?"picked":""}" onclick="toggleReward('${n}')"><img src="${img(n)}" loading="lazy" onerror="this.outerHTML='<div class=art-fallback>${emoji(n)}</div>'"><div>${n}</div></div>`).join("");
+  document.getElementById("pool-shop").innerHTML=names.map(n=>`<div class="card ${shopSel.includes(n)?"picked":""}" onclick="toggleShop('${n}')"><img src="${img(n)}" loading="lazy" onerror="this.outerHTML='<div class=art-fallback>${emoji(n)}</div>'"><div>${n}</div></div>`).join("");
+  document.getElementById("pool-deck").innerHTML=names.map(n=>`<div class="card" onclick="deck.push('${n}');renderAll()"><img src="${img(n)}" loading="lazy" onerror="this.outerHTML='<div class=art-fallback>${emoji(n)}</div>'"><div>${n}</div></div>`).join("");
+  document.getElementById("remove3").innerHTML=removal3().map(cardHTML).join("");
+  if(rewardSel.length)scoreReward(); else {document.getElementById("result").innerHTML="";document.getElementById("skipmsg").textContent="";}
+}
+function toggleReward(n){ rewardSel=rewardSel.includes(n)?rewardSel.filter(x=>x!==n):[...rewardSel,n].slice(-3); renderAll(); }
+function toggleShop(n){ shopSel=shopSel.includes(n)?shopSel.filter(x=>x!==n):[...shopSel,n]; renderShop(); }
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
+  ["reward","shop","event","concept"].forEach(t=>document.getElementById("tab-"+t).style.display=t===b.dataset.tab?"":"none");});
+document.getElementById("boss").onchange=renderAll;
+renderAll();
+</script>
+</body>
+</html>
