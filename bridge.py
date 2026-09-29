@@ -24,6 +24,7 @@ import json
 import os
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 BOSS_ALIASES = {
     "timeeater": "Time Eater",
@@ -93,6 +94,8 @@ def parse_state(raw):
         "event_id": raw.get("event_id"),
         "floor": raw.get("floor"),
         "character": raw.get("character"),
+        "relic_options": list(raw.get("relic_options") or []),
+        "potion_options": list(raw.get("potion_options") or []),
     }
 
 
@@ -118,6 +121,13 @@ class BridgeHandler(SimpleHTTPRequestHandler):
                 if time.time() - fresh < 120:
                     with open(self.state_file, encoding="utf-8") as f:
                         raw = json.load(f)
+                    try:
+                        from savewatch import resolve_ids
+                        for k in ("reward_options", "relic_options", "potion_options", "deck"):
+                            if raw.get(k):
+                                raw[k] = resolve_ids(raw[k])
+                    except ValueError:
+                        pass
                     s = parse_state(raw)
                     s["source"] = "mod"
                     self._json(s | {"mtime": fresh})
@@ -136,10 +146,11 @@ class BridgeHandler(SimpleHTTPRequestHandler):
 def main():
     ap = argparse.ArgumentParser(description="Spire Advisor live bridge")
     ap.add_argument("--port", type=int, default=8931)
-    ap.add_argument("--state", default="game-state.json")
+    ap.add_argument("--state", default="")  # 비우면 모드 live.json
     ap.add_argument("--saves", default="")  # 비우면 자동 탐색
     args = ap.parse_args()
-    BridgeHandler.state_file = args.state
+    BridgeHandler.state_file = args.state or str(
+        Path.home() / "Library/Application Support/SlayTheSpire2/spire-advisor/live.json")
     if args.saves:
         BridgeHandler.saves_dir = args.saves
     else:

@@ -3,3 +3,7 @@ __pycache__/
 .venv/
 .DS_Store
 game-state.json
+tests/tmp_savewatch/
+
+mod/bin/
+mod/obj/

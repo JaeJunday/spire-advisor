@@ -83,7 +83,7 @@ def score_options(deck, options, act=1, boss=None):
 
 EXHAUST_CLASS = "exhaust"
 BASIC_REMOVAL = {"Strike": 10, "Defend": 8}
-CURSE_REMOVAL = {"AscendersBane": 15, "Slimed": 12, "Dazed": 10, "Wound": 10, "Burn": 8}
+CURSE_REMOVAL = {"Ascender's Bane": 15, "Slimed": 12, "Dazed": 10, "Wound": 10, "Burn": 8, "Decay": 8, "Void": 6, "Doubt": 6, "Shame": 6, "Regret": 6}
 
 
 def _deck_data():
@@ -250,3 +250,46 @@ def score_event(deck, hp, max_hp, gold, act, boss, event_id):
         reasons[name] = " ".join(bits) if bits else "그냥 가기"
     ranked = sorted(values, key=values.get, reverse=True)
     return {"best": ranked[0] if ranked else None, "ranked": ranked, "values": values, "reasons": reasons, "patch": PATCH, "event": ev.get("name", event_id)}
+
+
+def _shop_data():
+    tier = _load("tier")
+    shop = _load("shop")
+    potions = _load("potions")
+    return tier, shop, potions
+
+
+def score_relics(options, boss=None):
+    """유물 선택지 점수. 카드/포션과 별개 트랙이에요."""
+    _, shop, _ = _shop_data()
+    relic_base = shop.get("relics", {})
+    scores = {r: round(float(relic_base.get(r, 45)), 1) for r in (options or [])}
+    best = max(scores, key=scores.get) if scores else None
+    return {"best": best, "scores": scores, "patch": PATCH}
+
+
+def _potion_value(name, hp, max_hp, potions):
+    base = float(potions.get("base", {}).get(name, 40))
+    missing = max(max_hp - hp, 0)
+    bonus = 0.0
+    if name in potions.get("heals", []) and max_hp > 0:
+        bonus = (missing / max_hp) * 25
+    return round(base + bonus, 1)
+
+
+def score_potion_offer(held, offered, hp, max_hp, slots=3):
+    """포션 제안. 자리 있으면 먹기, 꽉 찼으면 제일 약한 거랑 교체할지, 별로면 스킵."""
+    _, _, potions = _shop_data()
+    threshold = float(potions.get("take_threshold", 45))
+    ov = _potion_value(offered, hp, max_hp, potions)
+    held = list(held or [])
+    if len(held) < slots:
+        if ov >= threshold:
+            return {"action": "TAKE", "take": offered, "value": ov, "reason": f"{ov}점. 빈 슬롯에 챙겨요.", "patch": PATCH}
+        return {"action": "SKIP", "value": ov, "reason": f"{ov}점. 별로라 안 먹어요.", "patch": PATCH}
+    scored = sorted(((_potion_value(h, hp, max_hp, potions), h) for h in held))
+    worst_v, worst = scored[0]
+    if ov - worst_v >= 10:
+        return {"action": "SWAP", "take": offered, "drop": worst, "value": ov,
+                "reason": f"{offered} {ov}점 > {worst} {worst_v}점. 버리고 채워요.", "patch": PATCH}
+    return {"action": "SKIP", "value": ov, "reason": f"가진 게 더 나아요({worst} {worst_v}점).", "patch": PATCH}

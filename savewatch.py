@@ -14,16 +14,36 @@ IGNORE = {"prefs.save", "prefs.save.backup", "progress.save", "progress.save.bac
           "settings.save", "settings.save.backup", "profile.save", "profile.save.backup"}
 
 
-def _idmap():
+def _maps():
     with open(DATA_DIR / "card-idmap.json", encoding="utf-8") as f:
-        return json.load(f)["cards"]
+        cards = json.load(f)["cards"]
+    with open(DATA_DIR / "relic-idmap.json", encoding="utf-8") as f:
+        relics = json.load(f)["relics"]
+    with open(DATA_DIR / "potion-idmap.json", encoding="utf-8") as f:
+        potions = json.load(f)["potions"]
+    return cards, relics, potions
 
 
 def id_to_name(cid):
     """CARD.INFLAME -> Inflame. 모르는 ID는 그대로 둬요."""
     key = (cid or "").removeprefix("CARD.")
-    info = _idmap().get(key)
+    info = _maps()[0].get(key)
     return info["name"] if info else cid
+
+
+def any_id_to_name(rid):
+    """모드 live.json용. CARD/RELIC/POTION 접두를 떼고 이름으로 바꿔요."""
+    rid = rid or ""
+    cards, relics, potions = _maps()
+    for prefix, table in (("CARD.", cards), ("RELIC.", relics), ("POTION.", potions)):
+        if rid.startswith(prefix):
+            info = table.get(rid[len(prefix):])
+            return info["name"] if info else rid
+    return rid
+
+
+def resolve_ids(lst):
+    return [any_id_to_name(x if isinstance(x, str) else x.get("id", "")) for x in (lst or [])]
 
 
 def find_live_save(saves_dir):

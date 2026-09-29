@@ -1,0 +1,11 @@
+{
+  "id": "SpireAdvisor",
+  "name": "SpireAdvisor",
+  "author": "JaeJunday",
+  "description": "Read-only live screen export for Spire Advisor (rewards/shop/event options as IDs)",
+  "version": "0.1.0",
+  "has_pck": false,
+  "has_dll": true,
+  "dependencies": [],
+  "affects_gameplay": false
+}
