@@ -22,11 +22,14 @@
   .bar i { display: block; height: 100%; background: #8fd18f; border-radius: 3px; }
   label { font-size: 13px; color: #bbb; }
   input, select { background: #2a2f45; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px; margin: 2px 6px 2px 0; }
-  .deck .card { width: 90px; font-size: 11px; }
-  .deck .card img, .deck .art-fallback { min-height: 60px; height: 60px; }
-  .deck .art-fallback { font-size: 24px; }
+  .deck .card { width: 96px; font-size: 11px; }
+  .deck .card img { width: 100%; height: auto; aspect-ratio: 5/7; object-fit: cover; min-height: 0; }
+  .deck .art-fallback { height: auto; aspect-ratio: 5/7; font-size: 24px; }
   .panel { background: #22263a; border-radius: 10px; padding: 12px; margin: 12px 0; }
   .warn { color: #ffcc66; }
+  .card.remove { border-color: #ff6b6b; }
+  #scoreboard { font-size: 14px; color: #ccc; margin: 6px 0; }
+  #scoreboard b { color: gold; }
 </style>
 </head>
 <body>
@@ -36,7 +39,7 @@
 </div>
 
 <div class="panel">
-  <b>지금 뜨는 선택</b> <span id="skipmsg" class="warn"></span><div class="row" id="result"></div>
+  <b>지금 뜨는 선택</b> <span id="skipmsg" class="warn"></span><div id="scoreboard"><b>추천 점수</b> <span id="boardrows" style="color:#ccc"></span></div><div class="row" id="result"></div>
 </div>
 
 <div class="panel">
@@ -102,6 +105,10 @@ function bcoef(card, boss){ const c=BOSSES[boss]||{}; let f=1; const t=new Set(T
   if(t.has("weak")&&c.weak_bonus)f*=c.weak_bonus;
   if(t.has("block")&&c.block_bonus)f*=c.block_bonus; return f; }
 function finalScore(card, set, boss){ const b=BASE[card]??30; const k=hits(card,set); return +(b*(MULT**k)*bcoef(card,boss)).toFixed(1); }
+function board(rows){
+  const s=[...rows].sort((a,b)=>b.v-a.v);
+  document.getElementById("boardrows").innerHTML = s.map((r,i)=>`${i===0?"<b>":""}${i+1}위 ${r.a} ${r.v}점${i===0?"</b>":""}`).join(" · ");
+}
 
 function effSize(d){ const ex=new Set(CLASSES.exhaust); return d.length - Math.min(d.filter(x=>ex.has(x)).length,4); }
 function concept(d){ const s=new Set(d);
@@ -124,6 +131,7 @@ function scoreReward(){
     <div class=reason>${(TAGS[o.n]||[]).map(t=>TAG_KO[t]||t).join(" · ")}</div></div>`).join("");
   document.getElementById("skipmsg").textContent = skip?("⏭️ "+msg):"";
   document.getElementById("screenname").textContent = "카드 보상";
+  board(out.map(o=>({a:disp(o.n), v:o.s})));
 }
 function pickReward(n){ deck.push(n); rewardSel=[]; renderAll(); }
 
@@ -142,7 +150,10 @@ function renderShop(){
   cands.sort((a,b)=>b.v-a.v);
   const aff=cands.filter(c=>c.cost<=gold); const best=aff.length?aff[0].a:"저축";
   const max=Math.max(...cands.map(c=>c.v),1);
-  document.getElementById("result").innerHTML=cands.map(c=>`<div class="card ${c.a===best?"best":""}">${c.a===best?'<div class=badge>BEST</div>':""}${c.n?`<img src="${img(c.n)}" loading="lazy" onerror="this.outerHTML='<div class=art-fallback>${emoji(c.n)}</div>'"><div>${disp(c.n)}</div>`:`<div>${c.a}</div>`}<div class=score>${c.v}</div><div class=bar><i style="width:${Math.max(c.v,0)/max*100}%"></i></div><div class=reason>${c.cost}G ${c.cost>gold?"(부족)":""}</div></div>`).join("");
+  board(cands.map(c=>({a:c.a, v:c.v})));
+  document.getElementById("screenname").textContent = "상점";
+  document.getElementById("result").innerHTML=cands.map(c=>{const isDel=c.a.startsWith("삭제"), isSave=c.a==="저축";
+    return `<div class="card ${c.a===best?"best":""} ${isDel?"remove":""}">${c.a===best?'<div class=badge>BEST</div>':""}${c.n?`<img src="${img(c.n)}" loading="lazy" onerror="this.outerHTML='<div class=art-fallback>${emoji(c.n)}</div>'"><div>${disp(c.n)}</div>`:`<div style="font-size:44px">${isDel?"🗑️":"💰"}</div><div>${c.a}</div>`}<div class=score>${c.v}</div><div class=bar><i style="width:${Math.max(c.v,0)/max*100}%"></i></div><div class=reason>${c.cost}G ${c.cost>gold?"(부족)":""}</div></div>`;}).join("");
 }
 function renderEvent(){
   const id = (live.on && live.screen==="event" && live.event_id) ? live.event_id : "fountain";
@@ -154,6 +165,7 @@ function renderEvent(){
     if(fx.relic){v+=(RELICS[fx.relic]||40)*0.5;b.push("유물");} if(fx.curse){v-=(mit?8:20);b.push("저주");}
     return {n,v:+v.toFixed(1),b:b.join(" · ")}; });
   rows.sort((a,b)=>b.v-a.v); const max=Math.max(...rows.map(r=>r.v),1);
+  board(rows.map(r=>({a:r.n, v:r.v})));
   document.getElementById("result").innerHTML=rows.map((r,i)=>`<div class="card ${i===0?"best":""}">${i===0?'<div class=badge>BEST</div>':""}<div>${r.n}</div><div class=score>${r.v}</div><div class=bar><i style="width:${r.v/max*100}%"></i></div><div class=reason>${r.b}</div></div>`).join("");
   document.getElementById("screenname").textContent = "물음표: " + (EVENTS[id]?EVENTS[id].name:id);
 }
